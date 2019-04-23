@@ -1,0 +1,153 @@
+<html>
+
+<head>
+    <title>Ws</title>
+
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+</head>
+
+<body>
+
+<div class="" id="main">
+    <!-- Content here -->
+    <div class="col-12">
+        <table id="login-table" class="col-6">
+            <tr>
+                <td><input type="text" id="name" class="col-12 " placeholder="name"></td>
+                <td>
+                    <button type="button" id="login" class="btn btn-info btn-block">login</button>
+                </td>
+            </tr>
+            <tr>
+                <td></td>
+            </tr>
+
+        </table>
+        <canvas id="board" width="500" height="500" style="border:1px solid #000000;"></canvas>
+    </div>
+</div>
+<script>
+    var ACTION_PING = "p";
+    var ACTION_LOGIN = "l";
+    var ACTION_LOGIN_SUCCESS = "ls";
+    var ACTION_LOGOUT = "lg";
+    var ACTION_MOVE = "m";
+    var players = [];
+    var name = "";
+    var canvas = document.getElementById("board");
+    var ctx = canvas.getContext("2d");
+    ctx.moveTo(0, 0);
+
+    var socket = null;
+
+    $(function () {
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (var key in players) {
+                var player = players[key];
+                var x = player.x;
+                var y = player.y;
+
+                ctx.fillStyle = "#000";
+                ctx.font = "10px Arial";
+                ctx.fillText(key, x - 15, y - 20);
+                ctx.moveTo(x, y);
+                ctx.beginPath();
+                ctx.arc(x - 5, y - 5, 10, 0, 2 * Math.PI);
+                ctx.fillStyle = player.color;
+                ctx.fill();
+            }
+        }
+
+        $("#name").focus();
+        $("#login").click(function () {
+            name = $("#name").val();
+            if (!name) {
+                return;
+            }
+            send(ACTION_LOGIN);
+        });
+
+        if (!window["WebSocket"]) {
+            alert("Error: Your browser does not support web sockets.")
+        } else {
+            socket = new WebSocket("ws://localhost:9999/room");
+            socket.onclose = function () {
+                alert("Connection has been closed.");
+            };
+            socket.onmessage = function (e) {
+                var data = JSON.parse(e.data);
+                switch (data.a) {
+                    case ACTION_LOGIN_SUCCESS:
+                        $("#name").attr("disabled", "disabled");
+                        $("#login").attr("disabled", "disabled");
+
+                        document.body.onkeydown = function (e) {
+                            if (!e.metaKey) {
+                                e.preventDefault();
+                            }
+                            var keyCode = 0;
+                            switch (e.code) {
+                                case "ArrowRight":
+                                    keyCode = 1;
+                                    break;
+                                case "ArrowLeft":
+                                    keyCode = 2;
+                                    break;
+                                case "ArrowDown":
+                                    keyCode = 3;
+                                    break;
+                                case "ArrowUp":
+                                    keyCode = 4;
+                                    break;
+                            }
+                            if (keyCode > 0) {
+                                send("m", {"t": keyCode})
+                            }
+                        };
+
+                        break;
+                    case ACTION_LOGIN:
+                        players[data.p] = {x: data.x, y: data.y, color: data.c};
+                        draw();
+                        break;
+                    case ACTION_LOGOUT:
+                        delete players[data.p];
+                        draw();
+                        break;
+                    case ACTION_MOVE:
+                        players[data.p].x = data.x;
+                        players[data.p].y = data.y;
+                        draw();
+                        break;
+                }
+                console.log(data);
+            };
+
+            socket.onopen = function (event) {
+                console.log("WebSocket is open now.");
+                socket.send("c:r:" + window.name);
+                startPing();
+            };
+        }
+
+        function startPing() {
+            setInterval(function () {
+                send(ACTION_PING);
+            }, 1000 * 5);
+        }
+
+        function send(action, data) {
+            data = (typeof data === 'undefined') ? {} : data;
+            data.n = name;
+            data.a = action;
+            socket.send(JSON.stringify(data));
+        }
+
+    });
+
+</script>
+</body>
+
+</html>
